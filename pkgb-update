@@ -1,0 +1,423 @@
+#!/bin/sh
+
+# Cannot work below 15.0-RELEASE
+readonly MinMajVer=15
+readonly MinMinVer=0
+
+readonly RcTok="RC"
+readonly ReleaseTok="RELEASE"
+readonly StableTok="STABLE"
+readonly CurrentTok="CURRENT"
+
+readonly Targets="[1-9][0-9].[0-9]-${ReleaseTok}@Frelease
+[1-9][0-9]-(${StableTok}|${CurrentTok})@Fstable@Cstable
+[1-9][0-9].[0-9]-${RcTok}[1-9]@Frc"
+
+readonly pkgOSdir="/etc/pkg/"
+readonly pkgUserdir="/usr/local/etc/pkg/repos/"
+readonly tmpdir="/tmp/pkgb-update"
+readonly tmpfile="upg.conf"
+
+readonly SEDEL="!"
+readonly PlatestTok="/\${ABI}/latest"
+readonly KlatestTok="/\${ABI}/kmods_latest"
+
+Usage()
+{
+	cat << EndOfHelp
+This tool helps to update / upgrade a system under pkgbase.
+Usage: $ScriptName command [FreeBSD-version]
+
+command can be one of:
+	update: apply security patches.
+	upgrade FreeBSD-version: try to upgrade to 'FreeBSD-version'.
+	diag : display the different repositories used by pkg.
+
+FreeBSD-version can be:
+	- XX.x-RELEASE
+	- XX.x-RCx
+	- XX-STABLE
+	- XX-CURRENT (only the last major version of FreeBSD)
+EndOfHelp
+	exit 1
+}
+
+CheckRoot()
+{
+	if [ $(id -u) -ne 0 ]; then
+		echo "You need to be root to run this."
+		exit 1
+	fi
+}
+
+Ask()
+{
+	local rep
+	read -p "$1 " rep
+	case "$rep" in
+		[yY]*) 	return 0;;
+		*) return 1;;
+	esac
+}
+
+GetRepos()
+{
+	local lr r d
+	lr=$(pkg repos -le)
+	for r in $lr; do
+		d="$(pkg repos $r)"
+		if [ -n "$(echo "$d" | grep kmod)" ]; then
+			Rkmods="$r"
+		elif [ -n "$(echo "$d" | grep base)" ]; then
+			Rbase="$r"
+		else
+			Rports="$r"
+		fi
+	done
+}
+
+Comment()
+{
+	local target="$1"
+	local file="$2"
+	local replace fc Etarget
+
+	# Escape sed delimiter $SEDEL, \, / and &
+	Etarget=$(echo -n "$target" | sed -e "s/[$SEDEL\\/\&]/\\\&/g")
+	fc=$(echo "$Etarget"|cut -c1)
+	if [ "$fc" = "#" ]; then # In case it's already commented
+		return
+	fi
+	replace="#$Etarget" 
+	sed -i "" -e "s${SEDEL}$Etarget${SEDEL}$replace${SEDEL}1" "$file"
+}
+
+RemoveLatestRepo()
+{
+	if [ -n "$2" ]; then
+		echo "$2" | while read -r subline; do
+			# Memo: we are in read line, all written var will be lost
+			Comment "$subline" "$1"
+		done
+	fi
+}
+
+GetCURRENT()
+{
+	local v vurl vf ctok
+	vurl=" https://raw.githubusercontent.com/freebsd/freebsd-src/refs/heads/main/RELNOTES"
+	vf="/tmp/pkgb-r.txt"
+	ctok="Release notes for FreeBSD"
+
+	if ! (timeout 10s fetch -qo $vf $vurl 2> /dev/null); then
+		rm -f $vf
+		echo ""
+		return
+	fi
+	v="$(grep "$ctok" $vf | cut -d . -f1 | cut -d ' ' -f5)"
+	rm $vf
+	echo "$v"
+}
+
+GetBranch()
+{
+	local b="$(echo "$1"|cut -d '-' -f2)"
+	local n=0
+	case "$b" in
+		${RcTok}*) n=1 ;;
+		$ReleaseTok) n=2 ;;
+		$StableTok|$CurrentTok) n=3 ;;
+	esac
+	echo "$n"		
+}
+
+Frelease()
+{
+	tvm="$(echo "$Target" | cut -d . -f2| cut -d - -f1)"
+	tvM="$(echo "$Target" | cut -d . -f1)"
+	URL="${URL}base_release_$tvm\""
+}
+
+Fstable()
+{
+	tvM="$(echo "$Target" | cut -d '-' -f1)"
+	echo -n "Trying to get CURRENT version number... "
+	CUR="$(GetCURRENT)"
+	if [ -z "$CUR" ]; then
+		echo "Failed."
+	else
+	# See if CURRENT or STABLE must be used
+		echo "$CUR"
+		w="$(echo "$Target" | cut -d '-' -f2)"
+		if [ "$tvM" = "$CUR" ]; then
+			if ! [ "$w" = "$CurrentTok" ]; then
+				found=false
+				return
+			fi
+		elif ! [ "$w" = "$StableTok" ]; then
+			found=false
+			return
+		fi
+	fi
+	tvm="$hvm" # It's just to make further calculs right
+}
+
+Cstable()
+{
+	while true; do
+		read -p "Do you want latest (l) ou weekly (w) repo? " rep
+		case $rep in
+			l*)	repo=latest
+				break
+				;;
+			w*)	repo=weekly
+				break
+				;;
+		esac
+	done
+	URL="${URL}base_${repo}\""
+	Flag="f" # We are obliged to force for STABLE
+}
+
+Frc()
+{
+	local u
+	u="$(echo "$Target" | cut -d . -f2 | tr '[:upper:]' '[:lower:]' \
+	   | sed -e "s/-/_/1")"
+	URL="${URL}base_release_$u\""
+	tvm="$(echo "$Target" | cut -d . -f2| cut -d - -f1)"
+	tvM="$(echo "$Target" | cut -d . -f1)"
+}
+
+Upgrade()
+{
+	local t f func
+	found=false
+	Major=false
+	Target="$1"
+	Flag="" # Possibly force all pkg for upgrade
+
+	# What if pkg REPOS_DIR var isn't the default one?
+	local pdOS="$(pkg config REPOS_DIR | head -n1)"
+	local pdU="$(pkg config REPOS_DIR | tail -n1)"
+	local nd="$(pkg config REPOS_DIR | wc -l)"
+	if  [ "$nd" -ne 2 ] || ! [ "$pdOS" = "$pkgOSdir" ] || \
+	    ! [ "$pdU" = "$pkgUserdir" ]; then
+		echo "Your pkg REPOS_DIR var content is not standard..."
+		echo "Cannot deal with that:"
+		pkg config REPOS_DIR
+		exit 1
+	fi
+
+	if [ -z "$Target" ]; then
+		echo "Please specify the target FreeBSD version."
+		Usage
+	fi
+
+	URL="url: \"pkg+https://pkg.FreeBSD.org/\${ABI}/"
+	for t in $Targets; do
+		filter="$(echo "$t" | cut -d @ -f1)"
+		if [ -n "$(echo "$Target" | grep -E $filter)" ]; then
+			found=true
+			eval "$(echo "$t" | cut -d @ -f2)"
+			func="$(echo "$t" | cut -d @ -f3)"
+			break
+		fi
+	done
+	tvb="$(GetBranch "$Target")"
+	if !($found) || [ "$tvb" -eq 0 ]; then
+		echo "Invalid FreeBSD version target."
+		Usage
+	fi
+
+	# Check for downgrade
+	e="Cannot downgrade the system."
+	v="Host: $hvN		Target: $Target"
+	if [ "$hvN" = "$Target" ]; then # All the same
+		echo "Nothing to do?"
+		echo "$v"
+		exit 1
+	fi
+	# Target major version  < host major version
+	if [ "$tvM" -lt "$hvM" ]; then 
+		echo "$e"
+		echo "$v"
+		exit 1
+	fi
+	# Same major versions 
+	if [ "$tvM" -eq "$hvM" ]; then
+		# Target minor < host major version
+		if [ "$tvm" -lt "$hvm" ]; then 
+			echo "$e"
+			echo "$v"
+			exit 1
+		fi
+		# Same minor versions, let's see branches
+		if [ "$tvm" -eq "$hvm" ]; then 
+			# Case RELEASE -> RC or STABLE|CURRENT -> RELEASE|RC
+			if [ "$hvb" -gt "$tvb" ]; then
+				echo "$e"
+				echo "$v"
+				exit 1
+			fi
+			# Special case for RC
+			if [ "$hvb" -eq 1 ] && [ "$tvb" -eq 1 ]; then
+				# Examine x in RCx
+				hrcn="$(echo "$hvN"| cut -d C -f2)"
+				trcn="$(echo "$Target"| cut -d C -f2)"
+				# Target x < host x
+				if [ "$trcn" -lt "$hrcn" ]; then
+					echo "$e"
+					echo "$v"
+					exit 1
+				fi
+			# Target=XX-STABLE, Host=XX.x-STABLE (same for CURRENT)
+			elif [ "$hvb" -eq "$tvb" ]; then
+				echo "Nothing to do?"
+				echo "$v"
+				exit 1
+			fi
+		fi
+	else
+		Major=true
+	fi
+
+	# Execution of possible complementary code
+	if [ -n "$func" ]; then
+		eval "$func"
+	fi
+
+	if [ "$tvb" -eq 3 ]; then
+		echo "You may see 'downgrade' instead of 'upgrade' from pkg."
+		Ask "Don't bother with that... (press enter)"
+	fi
+
+	# Upgrade pkg first
+	echo "Checking for pkg upgrade..."
+	if ! (pkg upgrade -yr $Rports pkg); then
+		echo "Cannot upgrade pkg. Exiting."
+		exit 1
+	fi
+	echo "...Done."
+	echo
+
+	Cabi="$(pkg config abi)"
+	OS="$(echo "$Cabi" | cut -d : -f1)"
+	Carch="$(echo "$Cabi" | cut -d : -f3)"
+	abi="${OS}:${tvM}:${Carch}"
+	mkdir $tmpdir
+	# The machine may not have the keys yet
+	ctf="$Rbase: { $URL, signature_type: \"none\" }"
+	echo "$ctf" > $tmpdir/$tmpfile
+	
+	pkg -o ABI="$abi" -o IGNORE_OSVERSION=yes \
+		-o REPOS_DIR="$pkgOSdir,$pkgUserdir,$tmpdir" upgrade -${Flag}r "$Rbase"
+	r=$?
+	rm "$tmpdir/$tmpfile"
+	rmdir "$tmpdir"
+	if ! [ "$r" -eq "0" ]; then
+		exit "$r"
+	fi
+	Warn=false
+	if  [ "$tvb" = "3" ]; then # Target is STABLE or CURRENT
+		# We need to check if ports or kmods repos are set to latest
+		# and if yes, comment out these modified URLs
+		lf="$(find "$pkgUserdir" -type f -name *.conf)" 
+		for f in $lf; do
+			s="$(stat -f "%z" "$f")"
+			line="$(grep -e "$PlatestTok" "$f")"
+			RemoveLatestRepo "$f" "$line"
+			line="$(grep -e "$KlatestTok" "$f")"
+			RemoveLatestRepo "$f" "$line"
+			# If file size is different, a modification has been made
+			if ! [ "$s" = "$(stat -f "%z" "$f")" ]; then
+				Warn=true
+			fi
+		done 
+	fi
+	echo
+	if ($Warn); then
+		echo "At least one latest repo was active from your previous version."
+		echo "They have been commented out in $pkgUserdir."
+		Ask "This is because you enter in $Target version (press enter)"
+		echo
+	fi	
+
+	echo "Upgrade of kmod packages..."
+	pkg upgrade -fr "$Rkmods"
+	echo "** Triple check that all the kmods are for the new kernel. **"
+
+	if ($Major); then
+		echo "Major version change! Upgrade of all ports packages..."
+		pkg upgrade -fr "$Rports"
+	fi
+	echo "Please reboot to complete the upgrade."
+}
+
+DisplayRepo()
+{
+	echo "$1 = $2"
+	pkg repos "$2"|grep url|cut -d ':' -f2,3,4,5|cut -d , -f1
+}
+
+Diag()
+{
+	echo "Repositories:"
+	DisplayRepo Base "$Rbase"
+	DisplayRepo Kmods "$Rkmods"
+	DisplayRepo Ports "$Rports"
+}
+
+
+### Main ###
+
+unset GREP_OPTIONS
+ScriptName="$0"
+
+# Host version check
+hvN="$(uname -r | cut -d '-' -f1,2)" # Remove trailing patch number
+hvM="$(echo "$hvN" | cut -d . -f1)"
+hvm="$(echo "$hvN" | cut -d . -f2 | cut -d - -f1)"
+hvb="$(GetBranch "$hvN")"
+if [ "$hvb" -eq 0 ]; then
+	echo "Cannot get branch of the host version!"
+	echo "Host: $hvN"
+	return 1
+fi
+
+e="Cannot work with FreeBSD version < ${MinMajVer}.${MinMinVer}."
+if [ "$hvM" -lt "$MinMajVer" ]; then
+	echo "$e"
+	return 1
+fi
+if [ "$hvM" -eq "$MinMajVer" ] && [ "$hvm" -lt "$MinMinVer" ]; then
+	echo "$e"
+	return 1
+fi
+
+GetRepos
+if [ -z "$Rbase" ]; then
+	echo "This system doesn't seem to use pkgbase."
+	Diag
+	return 1
+fi
+if [ -z "$Rkmods" ] || [ -z "$Rports" ]; then
+	echo "At least one repository is empty or disabled on this machine."
+	echo "Cannot go further."
+	Diag
+	return 1
+fi
+
+case "$1" in
+	update)	CheckRoot
+		pkg upgrade -r "$Rbase"
+		return $?
+		;;
+	upgrade) CheckRoot
+		 Upgrade "$2"
+		;;
+	diag)	Diag
+		;;
+	*) 	Usage;;
+esac
+
