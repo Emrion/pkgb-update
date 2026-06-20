@@ -45,4 +45,12 @@ FreeBSD-version can be:
 
 # To do
 
+- Check what happen if I really downgrade a system.
 - Deal with .pkgnew.
+- Add ALPHAx and BETAx targets.
+
+# Some informations
+
+pkg has no way to know that STABLE packages are upgrades for a RELEASE or RCx system.  
+It actually considers that it is a downgrade, hence I use the force flag (-f) inthis case for pkg command line.  
+Reference: https://github.com/freebsd/pkg/issues/2703
