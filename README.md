@@ -53,7 +53,7 @@ FreeBSD-version can be:
 
 * pkg needs some keys to check what it downloads. You may think this is a problem only for major upgrades.  
   It's not. It blocks also for an uograde to a STABLE version. Apparently, RELEASE doesn't have the right key.  
-  So, I systematically use 'signature_type: "none"'.  
+  So, I systematically use 'signature_type: "none"' (just during the base upgrade).  
 * pkg has no way to know that STABLE packages are upgrades for a RELEASE or RCx system.  
 It actually considers that it is a downgrade, hence I use the force flag (-f) in this case for pkg command line.  
 Reference: https://github.com/freebsd/pkg/issues/2703
