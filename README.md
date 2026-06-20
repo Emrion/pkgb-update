@@ -52,8 +52,13 @@ FreeBSD-version can be:
 # Some informations
 
 * pkg needs some keys to check what it downloads. You may think this is a problem only for major upgrades.  
-  It's not. It blocks also for an uograde to a STABLE version. Apparently, RELEASE doesn't have the right key.  
+  It's not. It blocks also for an upgrade to a STABLE version. Apparently, RELEASE doesn't have the right key.  
   So, I systematically use 'signature_type: "none"' (just during the base upgrade).  
 * pkg has no way to know that STABLE packages are upgrades for a RELEASE or RCx system.  
-It actually considers that it is a downgrade, hence I use the force flag (-f) in this case for pkg command line.  
-Reference: https://github.com/freebsd/pkg/issues/2703
+  It actually considers that it is a downgrade, hence I use the force flag (-f) in this case for pkg command line.  
+  Reference: https://github.com/freebsd/pkg/issues/2703
+* There is another pitfall concerning STABLE or CURRENT version upgrade.  
+  You may have chosen the latest repos instead of the the default ones, the quarterly. I mean for a RELEASE version.  
+  In this case, you have set a repo .conf file in /usr/local/etc/pkg/repos/ with modified URLs.  
+  When you upgrade to STABLE or CURRENT version, these URLs take precedence on the legitimates ones for STABLE/CURRENT.  
+  pkgb-update checks this and comment out these modified URLs if they exist.   
