@@ -1,7 +1,7 @@
 # pkgb-update
 
 pkgb-update is the counterpart of freebsd-update, but for pkgbase systems.  
-It's a script that updates (well, that's just a simple command line) and mostly upgrade the FreeBSD OS.  
+It's a script that updates (that's simple) and mostly upgrades the FreeBSD OS.  
 
 pkgbase opens some upgrades (and updates) that were not supported otherwise than compiling the code source.  
 pkgbase dramatically speed up the upgrade comparing to freebsd-update.  
