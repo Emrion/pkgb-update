@@ -58,7 +58,7 @@ FreeBSD-version can be:
   It actually considers that it is a downgrade, hence I use the force flag (-f) in this case for pkg command line.  
   Reference: https://github.com/freebsd/pkg/issues/2703
 * There is another pitfall concerning STABLE or CURRENT version upgrade.  
-  You may have chosen the latest repos instead of the the default ones, the quarterly. I mean for a RELEASE version.  
+  You may have chosen the latest repos instead of the default ones (quarterly). I mean for a RELEASE version.  
   In this case, you have set a repo .conf file in /usr/local/etc/pkg/repos/ with modified URLs.  
-  When you upgrade to STABLE or CURRENT version, these URLs take precedence on the legitimates ones for STABLE/CURRENT.  
+  When you upgrade to STABLE or CURRENT version, these URLs take precedence on the new legitimate ones.  
   pkgb-update checks this and comment out these modified URLs if they exist.   
