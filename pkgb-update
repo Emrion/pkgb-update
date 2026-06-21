@@ -4,11 +4,19 @@
 readonly MinMajVer=15
 readonly MinMinVer=0
 
+# Branches tokens
 readonly RcTok="RC"
 readonly ReleaseTok="RELEASE"
 readonly StableTok="STABLE"
 readonly CurrentTok="CURRENT"
 
+# Branches numbers
+readonly Brc=1
+readonly Brelease=2
+readonly Bstable=3
+
+# Filters to recognize a valid FreeBSD version target
+# plus functions to execute for each case
 readonly Targets="[1-9][0-9].[0-9]-${ReleaseTok}@Frelease
 [1-9][0-9]-(${StableTok}|${CurrentTok})@Fstable@Cstable
 [1-9][0-9].[0-9]-${RcTok}[1-9]@Frc"
@@ -48,6 +56,16 @@ CheckRoot()
 		echo "You need to be root to run this."
 		exit 1
 	fi
+}
+
+Is_integer()
+{
+    case "$1" in
+        ''|*[!0-9]*)
+            return 1 ;;   
+        *)
+            return 0 ;;   
+    esac
 }
 
 Ask()
@@ -102,6 +120,8 @@ RemoveLatestRepo()
 	fi
 }
 
+# Try to get the FreeBSD major version number of CURRENT
+# It may fail, but in this case the script must work anyway
 GetCURRENT()
 {
 	local v vurl vf ctok
@@ -116,7 +136,11 @@ GetCURRENT()
 	fi
 	v="$(grep "$ctok" $vf | cut -d . -f1 | cut -d ' ' -f5)"
 	rm $vf
-	echo "$v"
+	if Is_integer "$v"; then
+		echo "$v"
+	else
+		echo ""
+	fi
 }
 
 GetBranch()
@@ -124,9 +148,9 @@ GetBranch()
 	local b="$(echo "$1"|cut -d '-' -f2)"
 	local n=0
 	case "$b" in
-		${RcTok}*) n=1 ;;
-		$ReleaseTok) n=2 ;;
-		$StableTok|$CurrentTok) n=3 ;;
+		${RcTok}*) n=$Brc ;;
+		$ReleaseTok) n=$Brelease ;;
+		$StableTok|$CurrentTok) n=$Bstable ;;
 	esac
 	echo "$n"		
 }
@@ -261,7 +285,7 @@ Upgrade()
 				exit 1
 			fi
 			# Special case for RC
-			if [ "$hvb" -eq 1 ] && [ "$tvb" -eq 1 ]; then
+			if [ "$hvb" -eq $Brc ] && [ "$tvb" -eq $Brc ]; then
 				# Examine x in RCx
 				hrcn="$(echo "$hvN"| cut -d C -f2)"
 				trcn="$(echo "$Target"| cut -d C -f2)"
@@ -319,7 +343,7 @@ Upgrade()
 		exit "$r"
 	fi
 	Warn=false
-	if  [ "$tvb" = "3" ]; then # Target is STABLE or CURRENT
+	if  [ "$tvb" -eq $Bstable ]; then # Target is STABLE or CURRENT
 		# We need to check if ports or kmods repos are set to latest
 		# and if yes, comment out these modified URLs
 		lf="$(find "$pkgUserdir" -type f -name *.conf)" 
