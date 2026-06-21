@@ -311,7 +311,7 @@ Upgrade()
 		eval "$func"
 	fi
 
-	if [ "$tvb" -eq 3 ]; then
+	if [ "$tvb" -eq $Bstable ]; then
 		echo "You may see 'downgrade' instead of 'upgrade' from pkg."
 		Ask "Don't bother with that... (press enter)"
 	fi
