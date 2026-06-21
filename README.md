@@ -51,6 +51,10 @@ FreeBSD-version can be:
 
 # Some informations
 
+* There is a discrepancy between official STABLE and CURRENT names and the targets pkgb-update uses.  
+  For exemple, a valid target is 15-STABLE, not 15.1-STABLE.  
+  This is because there is no point to put a minor version to STABLE (same for CURRENT).  
+  I don't know why FreeBSD does that in its versions name.
 * pkg needs some keys to check what it downloads. You may think this is a problem only for major upgrades.  
   It's not. It blocks also for an upgrade to a STABLE version. Apparently, RELEASE doesn't have the right key.  
   So, I systematically use 'signature_type: "none"' (just during the base upgrade).  
