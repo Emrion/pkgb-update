@@ -16,13 +16,16 @@ pkgb-update is able to upgrade from RELEASE to RELEASE, but also from:
 
 It lacks ALPHA and BETA versions, this will come later.
 
+New: in addition, it allows to downgrade from any version to any.
+  
 # Usage
 
 Usage: pkgb-update command [FreeBSD-version]  
 
 command can be one of:  
 * update: apply security patches.  
-* upgrade FreeBSD-version: try to upgrade to 'FreeBSD-version'.  
+* upgrade FreeBSD-version: try to upgrade to 'FreeBSD-version'.
+* downgrade FreeBSD-version: as above, but more sporty.
 * diag : display the different repositories used by pkg.  
 
 FreeBSD-version can be:  
@@ -36,17 +39,17 @@ FreeBSD-version can be:
 - Check if the host version at least 15.0. If it's not the case, refuses to run.
 - Check if a repo using pkgbase is active or die.
 - Check if kmods and ports repos are enabled or die.
-- [upgrade] Check if the REPOS_DIR var of pkg is modified. If yes, refuses to run.
-- [upgrade] Check if the target version leads to a downgrade.
-- [upgrade] Force to upgrade pkg.
-- [upgrade] Once the base is upgraded, in case it's a STABLE or CURRENT upgrade and if latest RELEASE repos were enabled, disable them.
-- [upgrade] Force the upgrade of third-party kmods.
-- [upgrade] If this is a major verson upgrade, force the upgrade of all packages.
+- [upgrade/downgrade] Check if the REPOS_DIR var of pkg is modified. If yes, refuses to run.
+- [upgrade/downgrade] Check if the target version is compatible with upgrade or downgrade.
+- [upgrade/downgrade] Check if there is some .pkgnew files and if it's the case, leave a chance to stop the process.
+- [upgrade/downgrade] Force to upgrade pkg.
+- [upgrade/downgrade] Once the base is upgraded/downgraded, in case it's a STABLE or CURRENT upgrade and if latest RELEASE repos were enabled, disable them.
+- [upgrade/downgrade] Force the upgrade of third-party kmods.
+- [upgrade/downgrade] If this is a major verson upgrade, force the upgrade of all packages.
+- [upgrade/downgrade] Check again if there are some .pkgnew files and possibly warn.
 
 # To do
 
-- Check what happen if I really downgrade a system.
-- Deal with .pkgnew.
 - Add ALPHAx and BETAx targets.
 
 # Some informations
