@@ -4,6 +4,13 @@
 readonly MinMajVer=15
 readonly MinMinVer=0
 
+# Commands & Words
+Wupd="update"
+Wupg="upgrade"
+Wdown="downgrade"
+Wdiag="diag"
+Wnop="nowhere"
+
 # Branches tokens
 readonly RcTok="RC"
 readonly ReleaseTok="RELEASE"
@@ -21,6 +28,8 @@ readonly Targets="[1-9][0-9].[0-9]-${ReleaseTok}@Frelease
 [1-9][0-9]-(${StableTok}|${CurrentTok})@Fstable@Cstable
 [1-9][0-9].[0-9]-${RcTok}[1-9]@Frc"
 
+readonly etcOSdir="/etc/"
+readonly etcUserdir="/usr/local/etc/"
 readonly pkgOSdir="/etc/pkg/"
 readonly pkgUserdir="/usr/local/etc/pkg/repos/"
 readonly tmpdir="/tmp/pkgb-update"
@@ -29,6 +38,7 @@ readonly tmpfile="upg.conf"
 readonly SEDEL="!"
 readonly PlatestTok="/\${ABI}/latest"
 readonly KlatestTok="/\${ABI}/kmods_latest"
+readonly pkgnew=".pkgnew"
 
 Usage()
 {
@@ -37,9 +47,10 @@ This tool helps to update / upgrade a system under pkgbase.
 Usage: $ScriptName command [FreeBSD-version]
 
 command can be one of:
-	update: apply security patches.
-	upgrade FreeBSD-version: try to upgrade to 'FreeBSD-version'.
-	diag : display the different repositories used by pkg.
+	$Wupd: apply security patches.
+	$Wupg FreeBSD-version: try to upgrade to 'FreeBSD-version'.
+	$Wdown FreeBSD-version: as above, but more sporty.
+	$Wdiag : display the different repositories used by pkg.
 
 FreeBSD-version can be:
 	- XX.x-RELEASE
@@ -92,6 +103,27 @@ GetRepos()
 			Rports="$r"
 		fi
 	done
+}
+
+# CheckVersion VerMajor VerMinor
+CheckVersion()
+{
+	local VerMajor="$1"
+	local VerMinor="$2"
+	if ! Is_integer "$VerMajor" || ! Is_integer "$VerMinor"; then
+		echo "Cannot understand on wich version to work."
+		echo "-> $VerMajor.$VerMinor"
+		exit 1
+	fi
+	local e="Cannot work with FreeBSD version < ${MinMajVer}.${MinMinVer}."
+	if [ "$VerMajor" -lt "$MinMajVer" ]; then
+		echo "$e"
+		exit 1
+	fi
+	if [ "$VerMajor" -eq "$MinMajVer" ] && [ "$VerMinor" -lt "$MinMinVer" ]; then
+		echo "$e"
+		exit 1
+	fi
 }
 
 Comment()
@@ -155,6 +187,11 @@ GetBranch()
 	echo "$n"		
 }
 
+SeekPkgnew()
+{
+	echo "$(find "$etcOSdir" "$etcUserdir" -name "*$pkgnew")"
+}
+
 Frelease()
 {
 	tvm="$(echo "$Target" | cut -d . -f2| cut -d - -f1)"
@@ -213,12 +250,63 @@ Frc()
 	tvM="$(echo "$Target" | cut -d . -f1)"
 }
 
-Upgrade()
+CheckMove()
 {
-	local t f func
+	if [ "$tvM" -ne "$hvM" ]; then
+		Major=true
+	else
+		Major=false # Useless, but to show the idea
+	fi
+	if [ "$hvN" = "$Target" ]; then # All the same
+		echo "$Wnop"
+		return
+	fi
+	# Target major version  < host major version
+	if [ "$tvM" -lt "$hvM" ]; then
+		echo "$Wdown"
+		return
+	fi
+	# Same major versions
+	if [ "$tvM" -eq "$hvM" ]; then
+		# Target minor < host major version
+		if [ "$tvm" -lt "$hvm" ]; then
+			echo "$Wdown"
+			return
+		fi
+		# Same minor versions, let's see branches
+		if [ "$tvm" -eq "$hvm" ]; then
+			# Case RELEASE -> RC or STABLE|CURRENT -> RELEASE|RC
+			if [ "$hvb" -gt "$tvb" ]; then
+				echo "$Wdown"
+				return
+			fi
+			# Special case for RC
+			if [ "$hvb" -eq $Brc ] && [ "$tvb" -eq $Brc ]; then
+				# Examine x in RCx
+				hrcn="$(echo "$hvN"| cut -d C -f2)"
+				trcn="$(echo "$Target"| cut -d C -f2)"
+				# Target x < host x
+				if [ "$trcn" -lt "$hrcn" ]; then
+					echo "$Wdown"
+					return
+				fi
+			# Target=XX-STABLE, Host=XX.x-STABLE (same for CURRENT)
+			elif [ "$hvb" -eq "$tvb" ]; then
+				echo "$Wnop"
+				return
+			fi
+		fi
+	fi
+	echo "$Wupg"
+}
+
+Move()
+{
+	local t func r
 	found=false
 	Major=false
-	Target="$1"
+	Command="$1"
+	Target="$2"
 	Flag="" # Possibly force all pkg for upgrade
 
 	# What if pkg REPOS_DIR var isn't the default one?
@@ -254,66 +342,37 @@ Upgrade()
 		Usage
 	fi
 
-	# Check for downgrade
-	e="Cannot downgrade the system."
+	CheckVersion "$tvM" "$tvm"
+	# Check for downgrade/upgrade
+	local m="$(CheckMove)"
+
 	v="Host: $hvN		Target: $Target"
-	if [ "$hvN" = "$Target" ]; then # All the same
+	if [ "$m" = "$wno" ]; then
 		echo "Nothing to do?"
 		echo "$v"
 		exit 1
 	fi
-	# Target major version  < host major version
-	if [ "$tvM" -lt "$hvM" ]; then 
-		echo "$e"
+	if ! [ "$m" = "$Command" ]; then
+		echo "$Command is requested, but the target version leads to $m."
 		echo "$v"
 		exit 1
 	fi
-	# Same major versions 
-	if [ "$tvM" -eq "$hvM" ]; then
-		# Target minor < host major version
-		if [ "$tvm" -lt "$hvm" ]; then 
-			echo "$e"
-			echo "$v"
+	if [ "$Command" = "$Wdown" ]; then
+		Flag="f" # Needed for downgrade
+	fi
+
+	r="$(SeekPkgnew)"
+	if [ -n "$r" ]; then
+		echo "you already have at least one $pkgnew file (merge conflict):"
+		echo "$r"
+		if (Ask "Do you want to stop the $Command process to resolve them [y/n]?" ); then
 			exit 1
 		fi
-		# Same minor versions, let's see branches
-		if [ "$tvm" -eq "$hvm" ]; then 
-			# Case RELEASE -> RC or STABLE|CURRENT -> RELEASE|RC
-			if [ "$hvb" -gt "$tvb" ]; then
-				echo "$e"
-				echo "$v"
-				exit 1
-			fi
-			# Special case for RC
-			if [ "$hvb" -eq $Brc ] && [ "$tvb" -eq $Brc ]; then
-				# Examine x in RCx
-				hrcn="$(echo "$hvN"| cut -d C -f2)"
-				trcn="$(echo "$Target"| cut -d C -f2)"
-				# Target x < host x
-				if [ "$trcn" -lt "$hrcn" ]; then
-					echo "$e"
-					echo "$v"
-					exit 1
-				fi
-			# Target=XX-STABLE, Host=XX.x-STABLE (same for CURRENT)
-			elif [ "$hvb" -eq "$tvb" ]; then
-				echo "Nothing to do?"
-				echo "$v"
-				exit 1
-			fi
-		fi
-	else
-		Major=true
 	fi
 
 	# Execution of possible complementary code
 	if [ -n "$func" ]; then
 		eval "$func"
-	fi
-
-	if [ "$tvb" -eq $Bstable ]; then
-		echo "You may see 'downgrade' instead of 'upgrade' from pkg."
-		Ask "Don't bother with that... (press enter)"
 	fi
 
 	# Upgrade pkg first
@@ -375,7 +434,16 @@ Upgrade()
 		echo "Major version change! Upgrade of all ports packages..."
 		pkg upgrade -fr "$Rports"
 	fi
-	echo "Please reboot to complete the upgrade."
+
+	r="$(SeekPkgnew)"
+	if [ -n "$r" ]; then
+		echo "you have at least one $pkgnew file (merge conflict):"
+		echo "$r"
+		echo "You can try to solve these conflicts before to reboot."
+		echo "Don't forget to delete each $pkgnew files once fixed."
+	else
+		echo "Please reboot to complete the upgrade."
+	fi
 }
 
 DisplayRepo()
@@ -409,16 +477,7 @@ if [ "$hvb" -eq 0 ]; then
 	return 1
 fi
 
-e="Cannot work with FreeBSD version < ${MinMajVer}.${MinMinVer}."
-if [ "$hvM" -lt "$MinMajVer" ]; then
-	echo "$e"
-	return 1
-fi
-if [ "$hvM" -eq "$MinMajVer" ] && [ "$hvm" -lt "$MinMinVer" ]; then
-	echo "$e"
-	return 1
-fi
-
+CheckVersion $hvM $hvm
 GetRepos
 if [ -z "$Rbase" ]; then
 	echo "This system doesn't seem to use pkgbase."
@@ -433,14 +492,14 @@ if [ -z "$Rkmods" ] || [ -z "$Rports" ]; then
 fi
 
 case "$1" in
-	update)	CheckRoot
+	$Wupd)	CheckRoot
 		pkg upgrade -r "$Rbase"
 		return $?
 		;;
-	upgrade) CheckRoot
-		 Upgrade "$2"
-		;;
-	diag)	Diag
+	$Wupg|$Wdown)	CheckRoot
+			Move $1 "$2"
+			;;
+	$Wdiag)	Diag
 		;;
 	*) 	Usage;;
 esac
