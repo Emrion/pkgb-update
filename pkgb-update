@@ -477,7 +477,7 @@ if [ "$hvb" -eq 0 ]; then
 	return 1
 fi
 
-CheckVersion $hvM $hvm
+CheckVersion "$hvM" "$hvm"
 GetRepos
 if [ -z "$Rbase" ]; then
 	echo "This system doesn't seem to use pkgbase."
@@ -497,10 +497,10 @@ case "$1" in
 		return $?
 		;;
 	$Wupg|$Wdown)	CheckRoot
-			Move $1 "$2"
-			;;
+					Move "$1" "$2"
+					;;
 	$Wdiag)	Diag
-		;;
+			;;
 	*) 	Usage;;
 esac
 
