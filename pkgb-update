@@ -347,7 +347,7 @@ Move()
 	local m="$(CheckMove)"
 
 	v="Host: $hvN		Target: $Target"
-	if [ "$m" = "$wno" ]; then
+	if [ "$m" = "$Wnop" ]; then
 		echo "Nothing to do?"
 		echo "$v"
 		exit 1
