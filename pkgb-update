@@ -49,7 +49,7 @@ Usage: $ScriptName command [FreeBSD-version]
 command can be one of:
 	$Wupd: apply security patches.
 	$Wupg FreeBSD-version: try to upgrade to 'FreeBSD-version'.
-	$Wdown FreeBSD-version: as above, but more sporty.
+	$Wdown FreeBSD-version: same as above, but in the other way.
 	$Wdiag : display the different repositories used by pkg.
 
 FreeBSD-version can be:
