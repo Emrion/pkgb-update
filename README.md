@@ -25,7 +25,7 @@ Usage: pkgb-update command [FreeBSD-version]
 command can be one of:  
 * update: apply security patches.  
 * upgrade FreeBSD-version: try to upgrade to 'FreeBSD-version'.
-* downgrade FreeBSD-version: as above, but more sporty.
+* downgrade FreeBSD-version: same as above, but in the other way.
 * diag : display the different repositories used by pkg.  
 
 FreeBSD-version can be:  
