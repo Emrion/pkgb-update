@@ -465,6 +465,8 @@ Diag()
 
 unset GREP_OPTIONS
 ScriptName="$0"
+# As freebsd-update, to avoid an exotic PATH
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin:${PATH}
 
 # Host version check
 hvN="$(uname -r | cut -d '-' -f1,2)" # Remove trailing patch number
