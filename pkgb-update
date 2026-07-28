@@ -480,7 +480,6 @@ if [ "$hvb" -eq 0 ]; then
 fi
 CheckVersion "$hvM" "$hvm"
 
-e="This system doesn't seem to use pkgbase."
 if ! pkg which /usr/bin/uname 1>/dev/null 2>&1; then
 	echo "This system doesn't seem to use pkgbase."
 	return 1
