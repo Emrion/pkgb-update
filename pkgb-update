@@ -478,12 +478,17 @@ if [ "$hvb" -eq 0 ]; then
 	echo "Host: $hvN"
 	return 1
 fi
-
 CheckVersion "$hvM" "$hvm"
+
+e="This system doesn't seem to use pkgbase."
+if ! pkg which /usr/bin/uname 1>/dev/null 2>&1; then
+	echo "This system doesn't seem to use pkgbase."
+	return 1
+fi
+
 GetRepos
 if [ -z "$Rbase" ]; then
-	echo "This system doesn't seem to use pkgbase."
-	Diag
+	echo "Cannot find the base repository."
 	return 1
 fi
 if [ -z "$Rkmods" ] || [ -z "$Rports" ]; then
