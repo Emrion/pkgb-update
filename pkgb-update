@@ -111,7 +111,7 @@ CheckVersion()
 	local VerMajor="$1"
 	local VerMinor="$2"
 	if ! Is_integer "$VerMajor" || ! Is_integer "$VerMinor"; then
-		echo "Cannot understand on wich version to work."
+		echo "Cannot understand on which version to work."
 		echo "-> $VerMajor.$VerMinor"
 		exit 1
 	fi
