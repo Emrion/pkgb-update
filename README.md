@@ -9,14 +9,14 @@ Nevertheless, pkgbase has its own drawbacks. One of them is the complexity of th
 This is where a tool like pkgb-update has a role to play.  
 
 pkgb-update is able to upgrade from RELEASE to RELEASE, but also from:
-- RELEASE to RC
+- RELEASE to BETA or RC
+- BETA to next BETA
+- BETA to RC
 - RC to next RC
-- RELEASE or RC to STABLE
+- Any to STABLE
 - Any to CURRENT
 
-It lacks ALPHA and BETA versions, this will come later.
-
-New: in addition, it allows to downgrade from any version to any.
+pkgb-update is also able to downgrade from any version to any.
   
 # Usage
 
@@ -28,9 +28,10 @@ command can be one of:
 * downgrade FreeBSD-version: same as above, but in the other way.
 * diag : display the different repositories used by pkg.  
 
-FreeBSD-version can be:  
+FreeBSD-version can be: 
+* XX.x-BETAx
+* XX.x-RCx 
 * XX.x-RELEASE  
-* XX.x-RCx  
 * XX-STABLE  
 * XX-CURRENT (only the last major version of FreeBSD)  
 
@@ -50,7 +51,7 @@ FreeBSD-version can be:
 
 # To do
 
-- Add ALPHAx and BETAx targets.
+- Add ALPHAx target (if needed).
 
 # Some informations
 
