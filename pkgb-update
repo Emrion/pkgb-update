@@ -285,10 +285,10 @@ CheckMove()
 				echo "$Wdown"
 				return
 			fi
-			# Special case for RC & BETA
-			if ([ "$hvb" -eq $Brc ] && [ "$tvb" -eq $Brc ]) || ([ "$hvb" -eq $Bbeta ] && [ "$tvb" -eq $Bbeta ]); then
+			# Special case for RC and all branches < RC (namely BETA)
+			if [ "$hvb" -eq "$tvb" ] && [ "$tvb" -le $Brc ]; then
 				# Examine x in RCx or BETAx
-				hrcn=$(printf '%s\n' "$hvN" | awk '{ print substr($0, length($0), 1) }')
+				hrcn=$(printf '%s\n' "$hvN" | awk '{ print substr($0, length($0), 1) }') # Last character of the string
 				trcn=$(printf '%s\n' "$Target" | awk '{ print substr($0, length($0), 1) }')
 				# Target x < host x
 				if [ "$trcn" -lt "$hrcn" ]; then
